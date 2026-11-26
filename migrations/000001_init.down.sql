@@ -1,0 +1,2 @@
+-- pgcrypto is left installed; dropping it would break any UUID defaults
+-- added in later migrations.
