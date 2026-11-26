@@ -25,13 +25,6 @@ func newValidator() *validator.Validate {
 		return name
 	})
 
-	// Custom `password` tag. The field value is the plaintext; the rule set
-	// lives in password.go so the policy is in one place.
-	_ = val.RegisterValidation("password", func(fl validator.FieldLevel) bool {
-		ok, _ := checkPassword(fl.Field().String())
-		return ok
-	})
-
 	return val
 }
 
@@ -71,12 +64,6 @@ func message(fe validator.FieldError) string {
 		return "must be a valid UUID"
 	case "url":
 		return "must be a valid URL"
-	case "password":
-	_, reason := checkPassword(fe.Value().(string))
-	if reason == "" {
-		reason = "does not meet the password policy"
-	}
-	return reason
 	default:
 		return fmt.Sprintf("failed %s validation", fe.Tag())
 	}

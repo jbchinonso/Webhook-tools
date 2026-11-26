@@ -1,2 +1,0 @@
-DROP TABLE IF EXISTS booking_items;
-DROP TABLE IF EXISTS bookings;

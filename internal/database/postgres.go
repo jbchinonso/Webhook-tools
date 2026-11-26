@@ -10,6 +10,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"gorm.io/driver/postgres"
@@ -28,8 +29,12 @@ type DB struct {
 	replicaIsAlias bool
 }
 
-func New(cfg config.DBConfig, logLevel string) (*DB, error) {
-	primary, primarySQL, err := open(cfg.PrimaryDSN, cfg, logLevel)
+// New opens the primary (and, if configured, replica) connection pool(s).
+// log is the application's single *slog.Logger — GORM logs its SQL activity
+// through it too, rather than through a separate logger of its own, so every
+// log line (HTTP, app, SQL) shares one output format and one request_id.
+func New(cfg config.DBConfig, log *slog.Logger, logLevel string) (*DB, error) {
+	primary, primarySQL, err := open(cfg.PrimaryDSN, cfg, log, logLevel)
 	if err != nil {
 		return nil, fmt.Errorf("database: open primary: %w", err)
 	}
@@ -44,7 +49,7 @@ func New(cfg config.DBConfig, logLevel string) (*DB, error) {
 		}, nil
 	}
 
-	replica, replicaSQL, err := open(cfg.ReplicaDSN, cfg, logLevel)
+	replica, replicaSQL, err := open(cfg.ReplicaDSN, cfg, log, logLevel)
 	if err != nil {
 		_ = primarySQL.Close()
 		return nil, fmt.Errorf("database: open replica: %w", err)
@@ -58,11 +63,14 @@ func New(cfg config.DBConfig, logLevel string) (*DB, error) {
 	}, nil
 }
 
-func open(dsn string, cfg config.DBConfig, logLevel string) (*gorm.DB, *sql.DB, error) {
-	lvl := parseGormLevel(logLevel)
+func open(dsn string, cfg config.DBConfig, log *slog.Logger, logLevel string) (*gorm.DB, *sql.DB, error) {
+	gormLogger := gormlogger.NewSlogLogger(log, gormlogger.Config{
+		SlowThreshold: 200 * time.Millisecond,
+		LogLevel:      parseGormLevel(logLevel),
+	})
 
 	gdb, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger:                 gormlogger.Default.LogMode(lvl),
+		Logger:                 gormLogger,
 		SkipDefaultTransaction: true,
 		PrepareStmt:            true,
 	})

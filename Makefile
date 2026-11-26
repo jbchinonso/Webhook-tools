@@ -29,8 +29,3 @@ vet:
 
 tidy:
 	go mod tidy
-
-.PHONY: seed-admin
-
-seed-admin:
-	go run ./cmd/seedadmin
