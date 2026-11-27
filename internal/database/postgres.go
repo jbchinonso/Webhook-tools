@@ -1,9 +1,5 @@
-// Package database owns the Postgres connection pools — primary (writes)
-// and replica (reads) — and exposes them behind a single DB handle.
-//
-// When ReplicaDSN is empty, Replica aliases Primary so code that reads from
-// a replica is correct today and automatically benefits from a real replica
-// once one is configured.
+// Package database owns the Postgres connection pool and exposes it behind
+// a single DB handle.
 package database
 
 import (
@@ -22,14 +18,11 @@ import (
 
 type DB struct {
 	Primary *gorm.DB
-	Replica *gorm.DB
 
-	primarySQL     *sql.DB
-	replicaSQL     *sql.DB
-	replicaIsAlias bool
+	primarySQL *sql.DB
 }
 
-// New opens the primary (and, if configured, replica) connection pool(s).
+// New opens the primary connection pool.
 // log is the application's single *slog.Logger — GORM logs its SQL activity
 // through it too, rather than through a separate logger of its own, so every
 // log line (HTTP, app, SQL) shares one output format and one request_id.
@@ -39,27 +32,9 @@ func New(cfg config.DBConfig, log *slog.Logger, logLevel string) (*DB, error) {
 		return nil, fmt.Errorf("database: open primary: %w", err)
 	}
 
-	if cfg.ReplicaDSN == "" {
-		return &DB{
-			Primary:        primary,
-			Replica:        primary,
-			primarySQL:     primarySQL,
-			replicaSQL:     primarySQL,
-			replicaIsAlias: true,
-		}, nil
-	}
-
-	replica, replicaSQL, err := open(cfg.ReplicaDSN, cfg, log, logLevel)
-	if err != nil {
-		_ = primarySQL.Close()
-		return nil, fmt.Errorf("database: open replica: %w", err)
-	}
-
 	return &DB{
 		Primary:    primary,
-		Replica:    replica,
 		primarySQL: primarySQL,
-		replicaSQL: replicaSQL,
 	}, nil
 }
 
@@ -103,35 +78,12 @@ func parseGormLevel(level string) gormlogger.LogLevel {
 	}
 }
 
-func (d *DB) PrimarySQL() *sql.DB { return d.primarySQL }
-func (d *DB) ReplicaSQL() *sql.DB { return d.replicaSQL }
-
 func (d *DB) PingPrimary(ctx context.Context) error {
 	c, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	return d.primarySQL.PingContext(c)
 }
 
-func (d *DB) PingReplica(ctx context.Context) error {
-	if d.replicaIsAlias {
-		// Same pool as primary; no need to ping twice.
-		return nil
-	}
-	c, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	return d.replicaSQL.PingContext(c)
-}
-
 func (d *DB) Close() error {
-	if d.replicaIsAlias {
-		return d.primarySQL.Close()
-	}
-	var firstErr error
-	if err := d.primarySQL.Close(); err != nil && firstErr == nil {
-		firstErr = err
-	}
-	if err := d.replicaSQL.Close(); err != nil && firstErr == nil {
-		firstErr = err
-	}
-	return firstErr
+	return d.primarySQL.Close()
 }

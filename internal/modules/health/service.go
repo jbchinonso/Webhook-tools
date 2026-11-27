@@ -2,7 +2,6 @@ package health
 
 import (
 	"context"
-	"sync"
 
 	"gateway/webhook/internal/database"
 
@@ -16,45 +15,17 @@ type Service struct {
 func NewService(db *database.DB) *Service { return &Service{db: db} }
 
 type ReadinessReport struct {
-	Primary string `json:"primary"`
-	Replica string `json:"replica"`
+	Database string `json:"database"`
 }
 
-// Readiness checks both database handles concurrently. When no replica is
-// configured, PingReplica is a no-op and the replica is reported as "up"
-// via the primary alias.
 func (s *Service) Readiness(ctx context.Context) (*ReadinessReport, error) {
-	report := &ReadinessReport{Primary: "up", Replica: "up"}
+	report := &ReadinessReport{Database: "up"}
 
-	var (
-		wg         sync.WaitGroup
-		primaryErr error
-		replicaErr error
-	)
-
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		primaryErr = s.db.PingPrimary(ctx)
-	}()
-	go func() {
-		defer wg.Done()
-		replicaErr = s.db.PingReplica(ctx)
-	}()
-	wg.Wait()
-
-	if primaryErr != nil {
-		report.Primary = "down"
+	if err := s.db.PingPrimary(ctx); err != nil {
+		report.Database = "down"
 		return report, apperr.NewService(
 			"health", apperr.KindUnavailable,
-			"health.primary_down", "primary database unavailable", primaryErr,
-		)
-	}
-	if replicaErr != nil {
-		report.Replica = "down"
-		return report, apperr.NewService(
-			"health", apperr.KindUnavailable,
-			"health.replica_down", "replica database unavailable", replicaErr,
+			"health.database_down", "database unavailable", err,
 		)
 	}
 	return report, nil

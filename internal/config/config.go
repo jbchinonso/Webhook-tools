@@ -25,10 +25,7 @@ type HTTPConfig struct {
 }
 
 type DBConfig struct {
-	PrimaryDSN string
-	// ReplicaDSN is optional. When empty, reads fall back to Primary and the
-	// DB facade aliases the replica handle to the primary pool.
-	ReplicaDSN      string
+	PrimaryDSN      string
 	MaxOpenConns    int
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
@@ -54,7 +51,6 @@ func Load() (*Config, error) {
 		},
 		DB: DBConfig{
 			PrimaryDSN:      getEnv("DB_PRIMARY_DSN", ""),
-			ReplicaDSN:      getEnv("DB_REPLICA_DSN", ""),
 			MaxOpenConns:    getInt("DB_MAX_OPEN_CONNS", 25),
 			MaxIdleConns:    getInt("DB_MAX_IDLE_CONNS", 10),
 			ConnMaxLifetime: getDuration("DB_CONN_MAX_LIFETIME", 30*time.Minute),
